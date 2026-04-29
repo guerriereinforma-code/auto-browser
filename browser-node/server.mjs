@@ -1,6 +1,10 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { chromium } from "playwright";
+// Patchright is a drop-in undetected fork of Playwright that launches
+// Chromium without the automation signals (Runtime.enable / Console.enable /
+// --enable-automation) that Cloudflare-class detectors flag. Same API as
+// playwright, so the launchServer call below stays identical.
+import { chromium } from "patchright";
 
 const width = Number.parseInt(process.env.BROWSER_WIDTH || "1280", 10);
 const height = Number.parseInt(process.env.BROWSER_HEIGHT || "800", 10);

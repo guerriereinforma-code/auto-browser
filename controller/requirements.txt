@@ -1,6 +1,14 @@
 fastapi==0.120.4
 starlette==0.49.3
 uvicorn[standard]==0.35.0
+# Patchright is a drop-in undetected fork of Playwright that disables the
+# Runtime.enable / Console.enable / --enable-automation signals which most
+# Cloudflare-class bot detection systems key on. We list the playwright
+# package alongside patchright because patchright re-exports Playwright's
+# types but some peripheral callers (network_inspector type hints) still
+# resolve names against `playwright.async_api`. The runtime client used by
+# browser_manager imports from `patchright.async_api` (see browser_manager.py).
+patchright==1.56.4
 playwright==1.56.0
 pydantic-settings==2.10.1
 httpx==0.28.1

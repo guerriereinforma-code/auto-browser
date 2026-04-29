@@ -36,6 +36,11 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from uuid import uuid4
 
 if TYPE_CHECKING:
+    # Type imports — patchright re-exports the same Page/Request/Response
+    # surface, but resolving against playwright keeps existing tooling
+    # (mypy stubs, IDE jump-to-def) consistent. The runtime page passed in
+    # here will be a patchright Page when USE_BROWSERBASE=false; the duck
+    # typing matches.
     from playwright.async_api import Page, Request, Response
 
     from .pii_scrub import PiiScrubber

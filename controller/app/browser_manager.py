@@ -17,8 +17,14 @@ from typing import Any, Awaitable, Callable
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
-from playwright.async_api import Error as PlaywrightError
+# Use the patchright fork instead of vanilla playwright on the client side.
+# Patchright is API-compatible with playwright but suppresses Runtime.enable
+# and other CDP signals that Cloudflare-class bot detection (HeyGen Studio,
+# DataDome, PerimeterX) keys on. See BROWSERBASE_SETUP.md for context.
+# We retain the playwright package as a transitive type-stub source and so
+# any peripheral helper that imports `playwright.async_api` still resolves.
+from patchright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
+from patchright.async_api import Error as PlaywrightError
 
 try:  # pragma: no cover - optional until dependency is installed in runtime image
     import pyotp
@@ -863,6 +869,34 @@ class BrowserManager:
             if proxy_password:
                 proxy_cfg["password"] = proxy_password
             kwargs["proxy"] = proxy_cfg
+        else:
+            # No per-session proxy → fall back to a server-wide residential
+            # proxy if configured. Useful for Hetzner-IP-flagged targets like
+            # HeyGen Studio where datacenter ASNs are auto-marked. URL format:
+            #   http://user:pass@host:port  or  socks5://user:pass@host:port
+            proxy_url = (self.settings.residential_proxy_url or "").strip()
+            if proxy_url:
+                parsed = urlparse(proxy_url)
+                if parsed.hostname and parsed.scheme in {"http", "https", "socks5", "socks5h"}:
+                    proxy_cfg = {
+                        "server": (
+                            f"{parsed.scheme}://{parsed.hostname}"
+                            + (f":{parsed.port}" if parsed.port else "")
+                        ),
+                    }
+                    if parsed.username:
+                        proxy_cfg["username"] = parsed.username
+                    if parsed.password:
+                        proxy_cfg["password"] = parsed.password
+                    bypass = (self.settings.residential_proxy_bypass or "").strip()
+                    if bypass:
+                        proxy_cfg["bypass"] = bypass
+                    kwargs["proxy"] = proxy_cfg
+                else:
+                    logger.warning(
+                        "RESIDENTIAL_PROXY_URL malformed (%s) — skipping proxy",
+                        proxy_url,
+                    )
         return kwargs
 
     async def _cleanup_failed_session(

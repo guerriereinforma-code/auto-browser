@@ -30,8 +30,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /opt/browser-node
 
 COPY package.json ./
+# Install patchright (the undetected drop-in fork of Playwright) and pull
+# its patched Chromium build. Patchright launches Chromium without
+# `--enable-automation`, Runtime.enable / Console.enable / Page.frameAttached
+# signals that Cloudflare-class detectors key on — the bot fingerprint we
+# saw on HeyGen Studio. The patched binary is used by chromium.launchServer
+# inside server.mjs (which imports from `patchright` instead of `playwright`).
 RUN npm install --no-audit --no-fund \
-  && npx playwright install chromium
+  && npx patchright install chromium
 
 COPY entrypoint.sh /entrypoint.sh
 COPY server.mjs /opt/browser-node/server.mjs

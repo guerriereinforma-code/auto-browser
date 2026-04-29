@@ -262,6 +262,20 @@ class Settings(BaseSettings):
     browserbase_keep_alive: bool = Field(False, alias="BROWSERBASE_KEEP_ALIVE")
     browserbase_timeout_seconds: float = Field(20.0, alias="BROWSERBASE_TIMEOUT_SECONDS")
 
+    # Residential proxy for the LOCAL browser-node path. When set, every new
+    # context routes traffic through this proxy — useful when datacenter IPs
+    # (Hetzner DE) are flagged by anti-bot stacks. Format:
+    #   http://user:pass@host:port  (HTTP/HTTPS proxy)
+    #   socks5://user:pass@host:port (SOCKS5 — Playwright supports it natively)
+    # Leave empty to skip. Browserbase has its own proxy config
+    # (BROWSERBASE_PROXY_COUNTRY); this knob is for the local Chromium path.
+    residential_proxy_url: str | None = Field(None, alias="RESIDENTIAL_PROXY_URL")
+    residential_proxy_bypass: str | None = Field(
+        None,
+        alias="RESIDENTIAL_PROXY_BYPASS",
+        description="comma-separated list of host patterns to skip (e.g. 'localhost,*.heygencdn.com')",
+    )
+
     # Approval webhooks — notified when approvals are created or decided
     approval_webhook_url: str | None = Field(None, alias="APPROVAL_WEBHOOK_URL")
     approval_webhook_secret: str | None = Field(None, alias="APPROVAL_WEBHOOK_SECRET")
