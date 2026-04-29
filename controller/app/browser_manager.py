@@ -2999,6 +2999,37 @@ class BrowserManager:
         finally:
             session.pending_witness_context = None
 
+    async def stage_file(
+        self,
+        session_id: str,
+        *,
+        name: str,
+        data: bytes,
+    ) -> dict[str, Any]:
+        """Write a small blob into the session's upload directory so a
+        subsequent upload action can reference it by path. Used by remote
+        orchestrators that don't share the controller's filesystem and
+        therefore can't pre-place files. The path returned here passes
+        `_safe_upload_path` (it lives under session.upload_dir) and is
+        cleaned up alongside other session artifacts.
+        """
+        if "/" in name or "\\" in name or name in (".", ".."):
+            raise ValueError("name must not contain path separators or '.' / '..'")
+        session = await self.get_session(session_id)
+        target_path = (session.upload_dir / name).resolve()
+        # Defense-in-depth: ensure the resolved path stays inside the
+        # session's upload dir even after symlink/normalization tricks.
+        upload_root_str = str(session.upload_dir.resolve())
+        if not str(target_path).startswith(upload_root_str + os.sep) and str(target_path) != upload_root_str:
+            raise PermissionError("staged file must stay inside session upload root")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(data)
+        return {
+            "file_path": name,  # relative; manager.upload resolves against session.upload_dir
+            "absolute_path": str(target_path),
+            "size_bytes": len(data),
+        }
+
     async def upload(
 
         self,

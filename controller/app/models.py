@@ -182,6 +182,23 @@ class UploadRequest(_WithApproval):
         return self
 
 
+class StageFileRequest(StrictInputModel):
+    """Stage a file blob into the session's upload root so a subsequent
+    /actions/upload call can reference it by path. Lets remote orchestrators
+    push bytes without needing direct access to the controller's filesystem.
+    """
+
+    name: str = Field(min_length=1, max_length=200)
+    data_base64: str = Field(min_length=1, max_length=20_000_000)  # ~14 MB raw
+
+    @field_validator("name")
+    @classmethod
+    def reject_path_separators(cls, v: str) -> str:
+        if "/" in v or "\\" in v or v in (".", ".."):
+            raise ValueError("name must not contain path separators or '.' / '..'")
+        return v
+
+
 class SaveStorageStateRequest(StrictInputModel):
     path: str = Field(min_length=1, max_length=500, description="Relative path inside /data/auth")
 

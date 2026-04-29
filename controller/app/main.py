@@ -59,6 +59,7 @@ from .models import (
     SocialScrollRequest,
     SocialSearchRequest,
     SocialUnfollowRequest,
+    StageFileRequest,
     TabIndexRequest,
     TypeRequest,
     UploadRequest,
@@ -700,6 +701,30 @@ async def execute_action(session_id: str, payload: ExecuteActionRequest) -> dict
         raise HTTPException(status_code=403, detail="Not permitted") from None
     except ApprovalRequiredError:
         raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Internal error") from None
+
+
+@app.post("/sessions/{session_id}/files")
+async def stage_file(session_id: str, payload: StageFileRequest) -> dict:
+    """Stage a base64-encoded blob into the session's upload root.
+    The returned file_path can be passed to /sessions/{sid}/actions/upload
+    afterwards. This is the bridge for remote orchestrators that can't
+    pre-place files on the controller filesystem (e.g. gigaren-orchestrator
+    sitting in a separate container)."""
+    import base64 as _b64
+    try:
+        data = _b64.b64decode(payload.data_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="data_base64 invalid") from None
+    try:
+        return await manager.stage_file(session_id, name=payload.name, data=data)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found") from None
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not permitted") from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid request") from None
     except Exception:
         raise HTTPException(status_code=500, detail="Internal error") from None
 
