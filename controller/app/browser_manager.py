@@ -703,7 +703,13 @@ class BrowserManager:
 
             page = await context.new_page()
             page.set_default_timeout(self.settings.action_timeout_ms)
-            if self.settings.stealth_enabled:
+            # Inject the stealth init script only when both stealth is on
+            # AND the controller-level inject toggle is enabled. Patchright-
+            # backed browsers already apply binary-level stealth, and the
+            # init script gets blocked on strict-CSP sites (HeyGen Studio
+            # in particular: script-src 'self' 'unsafe-eval' rejects inline
+            # add_init_script payloads, leaving the page blank).
+            if self.settings.stealth_enabled and self.settings.stealth_inject_init_script:
                 await apply_stealth(
                     page,
                     navigator_languages=self.settings.browser_navigator_languages,

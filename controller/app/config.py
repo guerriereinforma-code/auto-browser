@@ -232,6 +232,17 @@ class Settings(BaseSettings):
 
     # Stealth / anti-bot
     stealth_enabled: bool = Field(True, alias="STEALTH_ENABLED")
+    # When the underlying browser is Patchright (or another binary-level
+    # stealth fork), the controller's `add_init_script(STEALTH_INIT_SCRIPT)`
+    # is redundant AND breaks on sites with strict CSP (like HeyGen Studio
+    # which only allows script-src 'self' 'unsafe-eval' — no inline scripts).
+    # Setting STEALTH_INJECT_INIT_SCRIPT=false skips that injection but
+    # keeps the rest of stealth_enabled side-effects (UA pool, locale,
+    # timezone, Accept-Language) which patchright doesn't auto-apply.
+    stealth_inject_init_script: bool = Field(
+        True,
+        alias="STEALTH_INJECT_INIT_SCRIPT",
+    )
     user_agent_pool: str = Field(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36,"
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36,"
