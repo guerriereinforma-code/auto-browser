@@ -1,8 +1,11 @@
 """Browser-side JavaScript constants used by BrowserManager for page observation."""
 from __future__ import annotations
 
+import json
+
 # Injected before every page load via add_init_script().
 # Removes automation signals, mocks realistic browser properties.
+# `__AB_NAVIGATOR_LANGUAGES__` is a JSON array placeholder substituted at injection time.
 STEALTH_INIT_SCRIPT = r"""
 () => {
   // Remove webdriver flag
@@ -42,7 +45,7 @@ STEALTH_INIT_SCRIPT = r"""
 
   // Languages
   try {
-    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    Object.defineProperty(navigator, 'languages', { get: () => __AB_NAVIGATOR_LANGUAGES__ });
   } catch (_) {}
 
   // Permissions API patch
@@ -609,8 +612,22 @@ FIND_ACCESSIBLE_TARGET_SCRIPT = r"""
 }
 """
 
-async def apply_stealth(page: object) -> None:
+def _parse_languages(spec: str | None) -> list[str]:
+    if not spec:
+        return ["en-US", "en"]
+    items = [item.strip() for item in spec.split(",") if item.strip()]
+    return items or ["en-US", "en"]
+
+
+def build_stealth_script(navigator_languages: str | None) -> str:
+    """Return the stealth init script with the navigator.languages placeholder substituted."""
+    langs = _parse_languages(navigator_languages)
+    return STEALTH_INIT_SCRIPT.replace("__AB_NAVIGATOR_LANGUAGES__", json.dumps(langs))
+
+
+async def apply_stealth(page: object, navigator_languages: str | None = None) -> None:
     """Inject stealth init script into a page before any navigation."""
     add_init_script = getattr(page, "add_init_script", None)
     if callable(add_init_script):
-        await add_init_script(STEALTH_INIT_SCRIPT)
+        script = build_stealth_script(navigator_languages)
+        await add_init_script(script)

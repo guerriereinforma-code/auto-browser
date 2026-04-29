@@ -8,6 +8,11 @@ const endpointFile = process.env.BROWSER_WS_ENDPOINT_FILE || "/data/profile/brow
 const host = process.env.PLAYWRIGHT_SERVER_HOST || "0.0.0.0";
 const port = Number.parseInt(process.env.PLAYWRIGHT_SERVER_PORT || "9223", 10);
 const advertisedHost = process.env.PLAYWRIGHT_SERVER_ADVERTISED_HOST || "browser-node";
+const launchLang = process.env.BROWSER_LANG || "it-IT,it";
+const extraArgs = (process.env.BROWSER_EXTRA_ARGS || "")
+  .split(/\s+/)
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const browserServer = await chromium.launchServer({
   headless: false,
@@ -24,8 +29,9 @@ const browserServer = await chromium.launchServer({
     "--disable-blink-features=AutomationControlled",
     "--no-first-run",
     "--no-default-browser-check",
-    "--lang=en-US,en",
+    `--lang=${launchLang}`,
     "--disable-notifications",
+    ...extraArgs,
   ],
 });
 

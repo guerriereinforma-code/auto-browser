@@ -596,7 +596,10 @@ class BrowserManager:
             page = await context.new_page()
             page.set_default_timeout(self.settings.action_timeout_ms)
             if self.settings.stealth_enabled:
-                await apply_stealth(page)
+                await apply_stealth(
+                    page,
+                    navigator_languages=self.settings.browser_navigator_languages,
+                )
             session = BrowserSession(
                 id=session_id,
                 name=name or f"session-{session_id}",
@@ -745,9 +748,12 @@ class BrowserManager:
         if effective_ua:
             kwargs["user_agent"] = effective_ua
         if self.settings.stealth_enabled:
-            kwargs.setdefault("timezone_id", "America/New_York")
-            kwargs.setdefault("locale", "en-US")
-            kwargs.setdefault("extra_http_headers", {"Accept-Language": "en-US,en;q=0.9"})
+            kwargs.setdefault("timezone_id", self.settings.browser_timezone)
+            kwargs.setdefault("locale", self.settings.browser_locale)
+            kwargs.setdefault(
+                "extra_http_headers",
+                {"Accept-Language": self.settings.browser_languages},
+            )
         if proxy_server:
             proxy_cfg: dict[str, Any] = {"server": proxy_server}
             if proxy_username:

@@ -233,11 +233,20 @@ class Settings(BaseSettings):
     # Stealth / anti-bot
     stealth_enabled: bool = Field(True, alias="STEALTH_ENABLED")
     user_agent_pool: str = Field(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36,"
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36,"
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36,"
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36,"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36,"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
         alias="USER_AGENT_POOL",
+    )
+    browser_locale: str = Field("it-IT", alias="BROWSER_LOCALE")
+    browser_timezone: str = Field("Europe/Rome", alias="BROWSER_TIMEZONE")
+    browser_languages: str = Field(
+        "it-IT,it;q=0.9,en;q=0.7",
+        alias="BROWSER_LANGUAGES",
+    )
+    browser_navigator_languages: str = Field(
+        "it-IT,it,en",
+        alias="BROWSER_NAVIGATOR_LANGUAGES",
     )
 
     # Approval webhooks — notified when approvals are created or decided
