@@ -46,6 +46,7 @@ from .browser_scripts import (
     SMOOTH_SCROLL_SCRIPT,
     apply_stealth,
 )
+from .browserbase_provider import BrowserbaseError, BrowserbaseProvider
 from .config import Settings
 from .memory_manager import MemoryManager
 from .models import (
@@ -189,6 +190,12 @@ class BrowserManager:
         self.witness_policy = WitnessPolicyEngine()
         self.runtime_provisioner = DockerBrowserNodeProvisioner(self.settings)
         self.tunnel_broker = IsolatedSessionTunnelBroker(self.settings)
+        # Browserbase managed browser provider — instantiated lazily on first
+        # use so missing credentials only error out at session create time
+        # (not at controller boot when use_browserbase=True is set but the
+        # operator hasn't filled in the key yet).
+        self._browserbase: "BrowserbaseProvider | None" = None
+        self._browserbase_sessions: dict[str, str] = {}
         self._session_created_hook: SessionCreatedHook | None = None
         self._session_closed_hook: SessionClosedHook | None = None
 
@@ -414,6 +421,12 @@ class BrowserManager:
         self.browser = None
         if self.playwright is not None:
             await self.playwright.stop()
+        if self._browserbase is not None:
+            try:
+                await self._browserbase.aclose()
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                logger.debug("browserbase provider close ignored: %s", exc)
+            self._browserbase = None
         await self.tunnel_broker.shutdown()
         await self.witness_remote.shutdown()
         await self.session_store.shutdown()
@@ -499,7 +512,96 @@ class BrowserManager:
             return self.settings.browser_ws_endpoint
         raise FileNotFoundError(f"missing playwright ws endpoint file: {ws_endpoint_file}")
 
+    def _ensure_browserbase_provider(self) -> "BrowserbaseProvider | None":
+        if not self.settings.use_browserbase:
+            return None
+        if self._browserbase is not None:
+            return self._browserbase
+        if not self.settings.browserbase_api_key or not self.settings.browserbase_project_id:
+            logger.warning(
+                "USE_BROWSERBASE=true but BROWSERBASE_API_KEY or "
+                "BROWSERBASE_PROJECT_ID missing — falling back to local browser-node",
+            )
+            return None
+        try:
+            self._browserbase = BrowserbaseProvider(
+                api_key=self.settings.browserbase_api_key,
+                project_id=self.settings.browserbase_project_id,
+                region=self.settings.browserbase_region,
+                proxy_country=self.settings.browserbase_proxy_country,
+                keep_alive=self.settings.browserbase_keep_alive,
+                timeout_seconds=self.settings.browserbase_timeout_seconds,
+            )
+            logger.info(
+                "browserbase provider ready (region=%s proxy=%s keep_alive=%s)",
+                self.settings.browserbase_region,
+                self.settings.browserbase_proxy_country or "off",
+                self.settings.browserbase_keep_alive,
+            )
+        except ValueError as e:
+            logger.warning("browserbase provider misconfigured (%s) — falling back to local", e)
+            self._browserbase = None
+        return self._browserbase
+
+    async def _acquire_browserbase_browser(self, session_id: str) -> tuple[Browser, str] | None:
+        """Try to acquire a Browserbase-hosted Browser. Returns (browser,
+        bb_session_id) on success or None when Browserbase is disabled,
+        misconfigured, or fails. Caller falls back to local browser-node
+        on None (so a Browserbase outage never produces a hard error)."""
+        provider = self._ensure_browserbase_provider()
+        if provider is None or self.playwright is None:
+            return None
+        try:
+            data = await provider.create_session(
+                user_agent=None,
+                locale=self.settings.browser_locale,
+                timezone=self.settings.browser_timezone,
+                viewport_width=self.settings.default_viewport_width,
+                viewport_height=self.settings.default_viewport_height,
+            )
+        except BrowserbaseError as e:
+            logger.warning(
+                "browserbase create_session failed for %s (%s) — falling back to local",
+                session_id, e,
+            )
+            return None
+        connect_url = data.get("connectUrl")
+        bb_session_id = data.get("id")
+        if not connect_url or not bb_session_id:
+            logger.warning("browserbase response missing connectUrl/id — falling back to local")
+            return None
+        try:
+            browser = await self.playwright.chromium.connect_over_cdp(connect_url)
+        except Exception as e:  # noqa: BLE001 — CDP connect can fail for any reason
+            logger.warning(
+                "browserbase CDP attach failed for %s (%s) — releasing bb session %s and falling back",
+                session_id, e, bb_session_id,
+            )
+            await provider.release_session(bb_session_id)
+            return None
+        logger.info("browserbase Browser attached for session %s (bb=%s)", session_id, bb_session_id)
+        self._browserbase_sessions[session_id] = bb_session_id
+        return browser, bb_session_id
+
+    async def _release_browserbase_session_for(self, local_session_id: str) -> None:
+        bb_session_id = self._browserbase_sessions.pop(local_session_id, None)
+        if not bb_session_id or self._browserbase is None:
+            return
+        try:
+            await self._browserbase.release_session(bb_session_id)
+        except Exception as e:  # noqa: BLE001 — best-effort cleanup
+            logger.debug("browserbase release for %s ignored: %s", bb_session_id, e)
+
     async def _acquire_session_browser(self, session_id: str) -> tuple[Browser, IsolatedBrowserRuntime | None]:
+        # Browserbase is the highest-priority provider when enabled — it
+        # ships fingerprint/proxy stealth that a local Chromium can't match.
+        # If it fails for any reason (network hiccup, quota, auth), we
+        # transparently fall through to the local provider stack.
+        bb_attempt = await self._acquire_browserbase_browser(session_id)
+        if bb_attempt is not None:
+            browser, _ = bb_attempt
+            return browser, None
+
         if self.settings.session_isolation_mode != "docker_ephemeral":
             return await self.ensure_browser(), None
 
@@ -793,6 +895,10 @@ class BrowserManager:
                 await self.runtime_provisioner.release(runtime)
             except Exception as exc:
                 logger.warning("failed to release isolated runtime during create_session rollback: %s", exc)
+        # Browserbase rollback — release the paid session so we don't keep
+        # it billing while the local session record is gone. No-op when the
+        # session never went through Browserbase.
+        await self._release_browserbase_session_for(session_id)
 
     async def get_session(self, session_id: str) -> BrowserSession:
         session = self.sessions.get(session_id)
@@ -3401,6 +3507,10 @@ class BrowserManager:
                         logger.warning("failed to close isolated browser for session %s: %s", session_id, exc)
                 if session.runtime is not None:
                     await self.runtime_provisioner.release(session.runtime)
+                # Release any Browserbase-hosted browser so the paid slot
+                # frees immediately rather than waiting for the bb idle
+                # timeout. No-op for local-only sessions.
+                await self._release_browserbase_session_for(session_id)
             self.sessions.pop(session_id, None)
             if self._session_closed_hook is not None:
                 try:

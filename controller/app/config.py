@@ -249,6 +249,19 @@ class Settings(BaseSettings):
         alias="BROWSER_NAVIGATOR_LANGUAGES",
     )
 
+    # Browserbase managed-browser provider (optional). When use_browserbase=True
+    # AND api_key+project_id are set, every new local session creates a fresh
+    # Browserbase session and connects via CDP. If Browserbase fails (network,
+    # quota, auth), the manager falls back to the local browser-node so the
+    # operator never gets a hard outage from a third-party hiccup.
+    use_browserbase: bool = Field(False, alias="USE_BROWSERBASE")
+    browserbase_api_key: str | None = Field(None, alias="BROWSERBASE_API_KEY")
+    browserbase_project_id: str | None = Field(None, alias="BROWSERBASE_PROJECT_ID")
+    browserbase_region: str = Field("eu-central-1", alias="BROWSERBASE_REGION")
+    browserbase_proxy_country: str = Field("", alias="BROWSERBASE_PROXY_COUNTRY")
+    browserbase_keep_alive: bool = Field(False, alias="BROWSERBASE_KEEP_ALIVE")
+    browserbase_timeout_seconds: float = Field(20.0, alias="BROWSERBASE_TIMEOUT_SECONDS")
+
     # Approval webhooks — notified when approvals are created or decided
     approval_webhook_url: str | None = Field(None, alias="APPROVAL_WEBHOOK_URL")
     approval_webhook_secret: str | None = Field(None, alias="APPROVAL_WEBHOOK_SECRET")
